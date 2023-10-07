@@ -9,6 +9,17 @@
 
 DECIMAL
 
+\ Change for zeptoforth
+\ Make this work for zeptoforth
+: find79 token dup averts x-token-expected find 0<> ;
+: zf? [ find79 task::spawn ] LITERAL ; \ TRUE if zeptoforth
+: IFZF [immediate] [ zf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFNZF [immediate] [ zf? ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+
+IFZF : CMOVE MOVE ;
+IFZF : within ( test low high -- flag ) OVER - >R - R> U< ;
+IFZF : erase ( addr bytes -- ) 0 fill ;
+
 \ Assert basic assumptions.
 1 CELLS 8 = CONSTANT sha1.is64
 1 CELLS 4 = CONSTANT sha1.is32
@@ -283,7 +294,9 @@ VARIABLE sha1.state            \ One of the following values
   \ message's bitcount length is inserted in an atomic manner--
   \ not across 512 bit blocks.
   sha1.perblock-bytecount @ 56 < IF \ 56 as in 64 - 8
-    app.msglen @ sha1.total-bytecount @ <> ABORT" WTH?"
+    app.msglen @ sha1.total-bytecount @ <>
+    IFNZF ABORT" WTH?"
+    IFZF if [: ." WTH?" cr ;] ?raise then
     app.msglen @ 8 sha1.store.bitcount
     sha1.state-completed sha1.state ! \ Update SHA1 state
   THEN  

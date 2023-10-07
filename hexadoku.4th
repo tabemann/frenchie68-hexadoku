@@ -52,18 +52,26 @@
 
 \ -------------------------------------------------------------
 DECIMAL
-MARKER wasteit
+
+1 cells 4 <> [if] MARKER wasteit [then]
 
 : gf? 1 CELLS 8 = ;            \ TRUE if GNU Forth
+: zf? 1 CELLS 4 = ;            \ TRUE if zeptoforth
 
-: IFZ7 [ gf?    ] LITERAL IF POSTPONE \ THEN ;
-: IFGF [ gf? 0= ] LITERAL IF POSTPONE \ THEN ;
+: IFZ7 [ gf? zf? or ] LITERAL IF POSTPONE \ THEN ;
+: IFGF [ gf? 0= zf? or ] LITERAL IF POSTPONE \ THEN ;
+: IFZF [ gf? zf? 0= or ] LITERAL IF POSTPONE \ THEN ;
+
+\ Are we going to display the puzzle?
+false constant display-puzzle?
 
 \ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
-IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
-IFZ7 : ;pn   [CHAR] ; EMIT pn ;
-IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
-IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+display-puzzle? [if]
+  IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
+  IFZ7 : ;pn   [CHAR] ; EMIT pn ;
+  IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
+  IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+[then]
 
 IFZ7 : machdep-wait ;
 IFZ7 : cell/ 1 RSHIFT ;
@@ -74,10 +82,40 @@ IFGF : machdep-wait ( 5 MS ) ; \ For visual effect only!
 IFGF : cell/ 3 RSHIFT ;
 IFGF : 2cells/ 4 RSHIFT ;
 
-: 16* 4 LSHIFT ;
-: 16/mod DUP $F AND SWAP 4 RSHIFT ;
-: 1+! 1 SWAP +! ;
-: 1-! -1 SWAP +! ;
+display-puzzle? [if]
+  IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
+  IFZF : ;pn   [CHAR] ; EMIT pn ;
+  IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
+  IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+[then]
+
+IFZF : machdep-wait ;
+IFZF : cell/ [inlined] 2 RSHIFT ;
+IFZF : 2cells/ [inlined] 3 RSHIFT ;
+
+zf? [if] : within ( test low high -- flag ) OVER - >R - R> U< ; [then]
+
+display-puzzle? [if]
+  zf? [if]
+    : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
+  [then]
+[then]
+zf? [if] : utime ( -- us ) timer::us-counter ; [then]
+zf? [if] : ? ( addr -- ) @ . ; [then]
+
+zf? 0= [if]
+  : 16* 4 LSHIFT ;
+  : 16/mod DUP $F AND SWAP 4 RSHIFT ;
+  : 1+! 1 SWAP +! ;
+  : 1-! -1 SWAP +! ;
+[else]
+  : 16* [inlined] 4 LSHIFT ;
+  : 16/mod [inlined] DUP $F AND SWAP 4 RSHIFT ;
+  : 1+! [inlined] 1 SWAP +! ;
+  : 1-! [inlined] -1 SWAP +! ;
+[then]
+
+display-puzzle? 0= [if] : AT-XY 2drop ; [then]
 
 \ -------------------------------------------------------------
 \ Variables and constants.
@@ -137,7 +175,11 @@ $10   , $20   , $40   , $80   ,
 $100  , $200  , $400  , $800  ,
 $1000 , $2000 , $4000 , $8000 ,
 
-: 2^n ( n -- 2^n ) CELLS exptbl + @ ;
+zf? 0= [if]
+  : 2^n ( n -- 2^n ) CELLS exptbl + @ ;
+[else]
+  : 2^n ( n -- 2^n ) [inlined] 1 swap lshift ;
+[then]
 
 \ -------------------------------------------------------------
 \ Incremental grid visualization.
@@ -168,17 +210,26 @@ $1000 , $2000 , $4000 , $8000 ,
 
   \ Now to convert 'saddr' to x,y.
   OVER grid - cell/ 16/mod   \ S: val\saddr\char-from-val\x\y
-  SWAP 2* SWAP AT-XY EMIT machdep-wait ;
+  SWAP 2* SWAP AT-XY
+  [ display-puzzle? ] [if] EMIT machdep-wait [else] drop [then]  ;
 
 \ -------------------------------------------------------------
 \ Transaction stack handling (undo log).
 
-: cell- 1 CELLS - ;
+zf? 0= [if]
+  : cell- [ 1 CELLS ] LITERAL - ;
+[else]
+  : cell- [inlined] [ 1 CELLS ] LITERAL - ;
+[then]
 
 : tstk-push ( begin-flag ptr -- )
   \ We need exactly two cells. Is enough room available?
   tstkp @ tstack - 2cells/ 0=
+  [ zf? 0= ] [if]
     ABORT" Transaction stack overflow"
+  [else]
+    if [: ." Transaction stack overflow" cr ;] ?raise then
+  [then]
 
   \ Extract x and y from the 'ptr' pointer.
   DUP >R
@@ -193,7 +244,11 @@ $1000 , $2000 , $4000 , $8000 ,
 : tstk-pop ( -- begin-flag )
   \ At least two cells need to be stacked up.
   tstk-bottom tstkp @ - 2cells/ 0=
-    ABORT" Transaction stack underflow"
+  [ zf? 0= ] [if]
+    ABORT" Transaction stack overflow"
+  [else]
+    if [: ." Transaction stack overflow" cr ;] ?raise then
+  [then]
 
   tstkp @ DUP @ >R             \ R: bitmsk, S: tsktp@
   CELL+ tstkp !
@@ -304,22 +359,22 @@ $1000 , $2000 , $4000 , $8000 ,
 \ Underline character rendition on.
 : +ul ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [4m" ;
+  [ display-puzzle? ] [if] #27 EMIT ." [4m" [then] ;
 
 \ Underline character rendition off.
 : -ul ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [m" ;
+  [ display-puzzle? ] [if] #27 EMIT ." [m" [then] ;
 
 \ Turn off the cursor (VT200 control sequence).
 : -cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [?25l" ;
+  [ display-puzzle? ] [if] #27 EMIT ." [?25l" [then] ;
 
 \ Turn on the cursor (VT200 control sequence).
 : +cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [?25h" ;
+  [ display-puzzle? ] [if] #27 EMIT ." [?25h" [then] ;
 
 : mask>char ( mask -- char )
   DUP countbits                \ S: mask\nbits
@@ -331,19 +386,25 @@ $1000 , $2000 , $4000 , $8000 ,
         + EXIT
       THEN
     LOOP
-    1 ABORT" WTF?"             \ This should never be executed
+    [ zf? 0= ] [if]
+      1 ABORT" WTF?"             \ This should never be executed
+    [else]
+      [: ." WTF?" cr ;] ?raise   \ This should never be executed
+    [then]
   THEN
   DROP wildc ;
 
 : display-grid ( -- )
-  grid 16 0 DO                 \ J has the current row#
-    16 0 DO                    \ I has the current col#
-      DUP @ mask>char
+  [ display-puzzle? ] [if]
+    grid 16 0 DO                 \ J has the current row#
+      16 0 DO                    \ I has the current col#
+        DUP @ mask>char
         EMIT SPACE
-      CELL+
-    LOOP
-    CR
-  LOOP DROP ;
+        CELL+
+      LOOP
+      CR
+    LOOP DROP
+  [then] ;
 
 \ -------------------------------------------------------------
 \ Primary way of altering a grid's spot but not the only one!
@@ -444,29 +505,58 @@ $1000 , $2000 , $4000 , $8000 ,
 \ Horizontal exclusion/filtering.
 
 \ No side effects.
-: get-horiz-mask ( yrow -- mask\FALSE | TRUE )
-  0                            \ Sanity check
-  $FFFF                        \ Initial mask
-  ROT 16* CELLS grid + >R      \ Beginning of row address
-  16 0 DO                      \ Iterate over columns
-    \ S: check\mask
-    J I CELLS + @ DUP countbits 1 = IF
-      \ S: check\mask\val
-      ROT OVER \ S: mask\val\check\val
-      2DUP AND \ S: mask\val\check\val\(check&val)
 
-      IF                       \ Bit is already set!!!
-        UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
+\ Doesn't work in zeptoforth due to use of J
+zf? 0= [if]
+  : get-horiz-mask ( yrow -- mask\FALSE | TRUE )
+    0                            \ Sanity check
+    $FFFF                        \ Initial mask
+    ROT 16* CELLS grid + >R      \ Beginning of row address
+    16 0 DO                      \ Iterate over columns
+      \ S: check\mask
+      J I CELLS + @ DUP countbits 1 = IF
+        \ S: check\mask\val
+        ROT OVER \ S: mask\val\check\val
+        2DUP AND \ S: mask\val\check\val\(check&val)
+
+        IF                       \ Bit is already set!!!
+          UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
+        THEN
+
+        \ S: mask\val\check\val
+        OR                       \ S: mask\val\(check|val)
+        -rot                     \ S: (check|val)\mask\val
+        INVERT AND
+      ELSE
+        DROP
       THEN
+    LOOP R> DROP NIP FALSE ;
+[else]
+  \ Version modified for zeptoforth
+  : get-horiz-mask ( yrow -- mask\FALSE | TRUE )
+    0                            \ Sanity check
+    $FFFF                        \ Initial mask
+    ROT 16* CELLS grid + { addr }      \ Beginning of row address
+    16 0 DO                      \ Iterate over columns
+      \ S: check\mask
+      addr I CELLS + @ DUP countbits 1 = IF
+        \ S: check\mask\val
+        ROT OVER \ S: mask\val\check\val
+        2DUP AND \ S: mask\val\check\val\(check&val)
 
-      \ S: mask\val\check\val
-      OR                       \ S: mask\val\(check|val)
-      -rot                     \ S: (check|val)\mask\val
-      INVERT AND
-    ELSE
-      DROP
-    THEN
-  LOOP R> DROP NIP FALSE ;
+        IF                       \ Bit is already set!!!
+          UNLOOP 2DROP 2DROP TRUE EXIT
+        THEN
+
+        \ S: mask\val\check\val
+        OR                       \ S: mask\val\(check|val)
+        -rot                     \ S: (check|val)\mask\val
+        INVERT AND
+      ELSE
+        DROP
+      THEN
+    LOOP NIP FALSE ;
+[then]
 
 : set-horiz-mask ( yrow mask -- failure-flag )
   \ If 'mask' is zero. just return a success indication.
@@ -493,30 +583,58 @@ $1000 , $2000 , $4000 , $8000 ,
 \ Vertical exclusion/filtering.
 
 \ No side effects.
-: get-vert-mask ( xcol -- mask\FALSE | TRUE )
-  0                            \ Sanity check
-  $FFFF                        \ Initial mask
-  ROT CELLS grid + >R          \ Beginning of column address
-  16 0 DO                      \ Iterate over rows
-    \ S: check\mask
-    J I 16* CELLS + @ DUP countbits 1 = IF
-      \ S: check\mask\val
-      ROT OVER                 \ S: mask\val\check\val
-      2DUP AND              \ S: mask\val\check\val\(check&val)
+\ Doesn't work in zeptoforth due to use of J
+zf? 0= [if]
+  : get-vert-mask ( xcol -- mask\FALSE | TRUE )
+    0                            \ Sanity check
+    $FFFF                        \ Initial mask
+    ROT CELLS grid + >R          \ Beginning of column address
+    16 0 DO                      \ Iterate over rows
+      \ S: check\mask
+      J I 16* CELLS + @ DUP countbits 1 = IF
+        \ S: check\mask\val
+        ROT OVER                 \ S: mask\val\check\val
+        2DUP AND              \ S: mask\val\check\val\(check&val)
 
-      IF                       \ Bit is already set!!!
-        UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
+        IF                       \ Bit is already set!!!
+          UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
+        THEN
+
+        \ S: mask\val\check\val
+        OR                       \ S: mask\val\(check|val)
+        -rot                     \ S: (check|val)\mask\val
+        INVERT AND
+      ELSE
+        DROP
       THEN
+    LOOP R> DROP NIP FALSE ;
+[else]
+  \ Version modified for zeptoforth
+  : get-vert-mask ( xcol -- mask\FALSE | TRUE )
+    0                            \ Sanity check
+    $FFFF                        \ Initial mask
+    ROT CELLS grid + { addr }          \ Beginning of column address
+    16 0 DO                      \ Iterate over rows
+      \ S: check\mask
+      addr I 16* CELLS + @ DUP countbits 1 = IF
+        \ S: check\mask\val
+        ROT OVER                 \ S: mask\val\check\val
+        2DUP AND              \ S: mask\val\check\val\(check&val)
 
-      \ S: mask\val\check\val
-      OR                       \ S: mask\val\(check|val)
-      -rot                     \ S: (check|val)\mask\val
-      INVERT AND
-    ELSE
-      DROP
-    THEN
-  LOOP R> DROP NIP FALSE ;
+        IF                       \ Bit is already set!!!
+          UNLOOP 2DROP 2DROP TRUE EXIT
+        THEN
 
+        \ S: mask\val\check\val
+        OR                       \ S: mask\val\(check|val)
+        -rot                     \ S: (check|val)\mask\val
+        INVERT AND
+      ELSE
+        DROP
+      THEN
+    LOOP NIP FALSE ;
+[then]
+  
 : set-vert-mask ( xcol mask -- failure-flag )
   \ If 'mask' is zero. just return a success indication.
   ?DUP 0= IF DROP FALSE EXIT THEN
@@ -651,6 +769,8 @@ $1000 , $2000 , $4000 , $8000 ,
       \ Backtrack up to the last transaction boundary.
       BEGIN tstk-pop UNTIL
       nbt 1+!                  \ Increment #backtracks
+      
+      nbt @ .
     ELSE
       R> DROP
     THEN
@@ -662,24 +782,28 @@ $1000 , $2000 , $4000 , $8000 ,
 : main ( -- )
   inits
 
-  stopon1st IF
-    PAGE -cursor display-grid
-  THEN
-
-  infer 0= IF
-    +cursor
-    CR ." No solutions" QUIT
-  THEN
+  [ display-puzzle? ] [if]
+    stopon1st IF
+      PAGE -cursor display-grid
+    THEN
+    
+    infer 0= IF
+      +cursor
+      CR ." No solutions" QUIT
+    THEN
+  [then]
 
   \ From here on, everything that could be inferred is in.
   TRUE TO logtrans
 
   stopon1st IF
     IFGF utime                 \ Starting timestamp
+    IFZF utime
     speculate DROP
-    31 15 AT-XY
+    [ display-puzzle? ] [if] 31 15 AT-XY [then]
 
     IFGF utime 2SWAP DNEGATE D+ DROP CR . ." us elapsed"
+    IFZF utime 2SWAP DNEGATE D+ CR d. ." us elapsed"
 
     CR ." Maximum recursion level: " reclevmax ?
     CR ." Problem solved at level: " reclev ?
@@ -691,5 +815,5 @@ $1000 , $2000 , $4000 , $8000 ,
     CR solutions ? ." solution(s) found"
   THEN ;
 
-main 7 EMIT wasteit
-
+main 7 EMIT
+zf? 0= [if] wasteit [then]

@@ -52,22 +52,32 @@
 
 \ -------------------------------------------------------------
 DECIMAL
-MARKER wasteit
+\ MARKER wasteit
 
-: find79                       \ -- xt|0; find79 <name>
-  BL WORD
-  DUP C@ 0= IF DROP ." Missing word name" EXIT THEN
-  FIND 0= IF DROP FALSE THEN ;
+\ Make this work for zeptoforth
+: find79 token dup averts x-token-expected find 0<> ;
+
+\ : find79                       \ -- xt|0; find79 <name>
+\   BL WORD
+\   DUP C@ 0= IF DROP ." Missing word name" EXIT THEN
+\   FIND 0= IF DROP FALSE THEN ;
 
 : gf? [ find79 utime ] LITERAL ;      \ TRUE if GNU Forth
 : sf? [ find79 SwiftForth ] LITERAL ; \ TRUE if SwiftForth
 : vf? [ find79 vfxforth ] LITERAL ;   \ TRUE if VFX Forth 64
 : z7? [ 1 CELLS 2 = ] LITERAL ;       \ TRUE if Z79Forth/A
+: zf? [ find79 task::spawn ] LITERAL ; \ TRUE if zeptoforth
 
-: IFGF [ gf? 0= ] LITERAL IF POSTPONE \ THEN ; IMMEDIATE
-: IFSF [ sf? 0= ] LITERAL IF POSTPONE \ THEN ; IMMEDIATE
-: IFVF [ vf? 0= ] LITERAL IF POSTPONE \ THEN ; IMMEDIATE
-: IFZ7 [ z7? 0= ] LITERAL IF POSTPONE \ THEN ; IMMEDIATE
+false constant display-puzzle?
+
+: IFGF [immediate] [ gf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFSF [immediate] [ sf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFVF [immediate] [ vf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFZ7 [immediate] [ z7? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFZF [immediate] [ zf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFNZF [immediate] [ zf? ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFDP [immediate] [ display-puzzle? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
+: IFNDP [immediate] [ display-puzzle? ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
 
 IFGF : machdep-wait ( 5 MS ) ; \ For visual effect only!
 IFGF : cell/ 3 RSHIFT ;
@@ -81,24 +91,46 @@ IFVF : machdep-wait ( 5 MS ) ; \ For visual effect only!
 IFVF : 2cells/ 4 RSHIFT ;
 IFVF : 2nip 2SWAP 2DROP ;
 
-\ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
-IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
-IFZ7 : ;pn   [CHAR] ; EMIT pn ;
-IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
-IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+IFZF : machdep-wait ;
+IFZF : cell/ [inlined] 2 RSHIFT ;
+IFZF : 2cells/ [inlined] 3 RSHIFT ;
 
+\ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
+IFDP IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
+IFDP IFZ7 : ;pn   [CHAR] ; EMIT pn ;
+IFDP IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFDP IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+  
 IFZ7 : machdep-wait ;
 IFZ7 : cell/ 1 RSHIFT ;
 IFZ7 : 2cells/ 2 RSHIFT ;
 IFZ7 : 2nip 2SWAP 2DROP ;
 
-: 16* 4 LSHIFT ;
-: 16/mod DUP $F AND SWAP 4 RSHIFT ;
-: 1+! 1 SWAP +! ;
-: 1-! -1 SWAP +! ;
+IFDP IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
+IFDP IFZF : ;pn   [CHAR] ; EMIT pn ;
+IFDP IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFDP IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+IFNDP IFZF : AT-XY 2drop ;
+
+IFZF : within ( test low high -- flag ) OVER - >R - R> U< ;
+
+IFDP IFZF : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
+IFNDP IFZF : page ( -- ) ;
+IFZF : utime ( -- us ) timer::us-counter ;
+IFZF : ? ( addr -- ) @ . ;
+
+IFNZF : 16* 4 LSHIFT ;
+IFNZF : 16/mod DUP $F AND SWAP 4 RSHIFT ;
+IFNZF : 1+! 1 SWAP +! ;
+IFNZF : 1-! -1 SWAP +! ;
+
+IFZF : 16* [inlined] 4 LSHIFT ;
+IFZF : 16/mod [inlined] DUP $F AND SWAP 4 RSHIFT ;
+IFZF : 1+! [inlined] 1 SWAP +! ;
+IFZF : 1-! [inlined] -1 SWAP +! ;
 
 \ Required import for detecting duplicate solutions.
-S" ./sdigest-generic.4th" INCLUDED
+IFNZF S" ./sdigest-generic.4th" INCLUDED
 \ If Z79Forth/A ever supports SHA1 digesting, we'll need
 \ a THRU of some sort here (or a LOAD).
 
@@ -166,7 +198,8 @@ $10   , $20   , $40   , $80   ,
 $100  , $200  , $400  , $800  ,
 $1000 , $2000 , $4000 , $8000 ,
 
-: 2^n ( n -- 2^n ) CELLS exptbl + @ ;
+IFNZF : 2^n ( n -- 2^n ) CELLS exptbl + @ ;
+IFZF : 2^n ( n -- 2^n ) [inlined] 1 swap lshift ; 
 
 \ -------------------------------------------------------------
 \ Incremental grid visualization.
@@ -199,18 +232,22 @@ $1000 , $2000 , $4000 , $8000 ,
   THEN
 
   OVER getxy-from-grid-addr    \ val\saddr\char-from-val\x\y
-  SWAP 2* SWAP AT-XY EMIT machdep-wait ;
+  IFDP SWAP 2* SWAP AT-XY EMIT machdep-wait
+  IFNDP 2drop drop
+  ;
 
 \ -------------------------------------------------------------
 \ Transaction stack handling (undo log).
 
 IFGF : cell- 1 CELLS - ;
 IFZ7 : cell- 1 CELLS - ;
+IFZF : cell- [inlined] [ 1 cells ] literal - ;
 
 : tstk-push ( begin-flag ptr -- )
   \ We need exactly two cells. Is enough room available?
   tstkp @ tstack - 2cells/ 0=
-    ABORT" Transaction stack overflow"
+  IFNZF ABORT" Transaction stack overflow"
+  IFZF if [: ." Transaction stack overflow" cr ;] ?raise then
 
   \ Extract x and y from the 'ptr' pointer.
   DUP >R
@@ -225,7 +262,8 @@ IFZ7 : cell- 1 CELLS - ;
 : tstk-pop ( -- begin-flag )
   \ At least two cells need to be stacked up.
   tstk-bottom tstkp @ - 2cells/ 0=
-    ABORT" Transaction stack underflow"
+  IFNZF ABORT" Transaction stack overflow"
+  IFZF if [: ." Transaction stack overflow" cr ;] ?raise then
 
   tstkp @ DUP @ >R             \ R: bitmsk, S: tsktp@
   CELL+ tstkp !
@@ -337,22 +375,26 @@ IFZ7 : cell- 1 CELLS - ;
 \ Underline character rendition on.
 : +ul ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [4m" ;
+  IFDP #27 EMIT ." [4m"
+  ;
 
 \ Underline character rendition off.
 : -ul ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [m" ;
+  IFDP #27 EMIT ." [m"
+  ;
 
 \ Turn off the cursor (VT200 control sequence).
 : -cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [?25l" ;
+  IFDP #27 EMIT ." [?25l"
+  ;
 
 \ Turn on the cursor (VT200 control sequence).
 : +cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  #27 EMIT ." [?25h" ;
+  IFDP #27 EMIT ." [?25h"
+  ;
 
 : mask>char ( mask -- char )
   DUP countbits                \ mask\nbits
@@ -364,19 +406,21 @@ IFZ7 : cell- 1 CELLS - ;
         + EXIT
       THEN
     LOOP
-    1 ABORT" WTF?"             \ This should never be executed
+    IFNZF 1 ABORT" WTF?"             \ This should never be executed
+    IFZF [: ." WTF?" cr ;] ?raise    \ This should never be executed
   THEN
   DROP wildc ;
 
 : display-grid ( -- )
-  grid 16 0 DO                 \ J has the current row#
-    16 0 DO                    \ I has the current col#
-      DUP @ mask>char
-        EMIT SPACE
-      CELL+
-    LOOP
-    CR
-  LOOP DROP ;
+  IFDP grid 16 0 DO                 \ J has the current row#
+  IFDP   16 0 DO                    \ I has the current col#
+  IFDP     DUP @ mask>char
+  IFDP       EMIT SPACE
+  IFDP     CELL+
+  IFDP   LOOP
+  IFDP CR
+  IFDP LOOP DROP
+;
 
 \ -------------------------------------------------------------
 \ Primary way of altering a grid's spot but not the only one!
@@ -685,7 +729,7 @@ IFZ7 : cell- 1 CELLS - ;
 : emergency-exit ( ... -- )
   \ Drain the data stack.
   BEGIN DEPTH WHILE DROP REPEAT
-  wasteit
+  IFNZF wasteit
   QUIT ;                       \ Clear the return stack
 
 : check-for-new-solution ( -- )
@@ -713,7 +757,10 @@ IFZ7 : cell- 1 CELLS - ;
   sha1.digest
   sol-digest1 ingest-digest
 
-  sol-digest0 5 CELLS sol-digest1 OVER COMPARE 0= IF
+  sol-digest0 5 CELLS sol-digest1 OVER
+  IFNZF COMPARE 0=
+  IFZF equal-strings?
+  IF
     EXIT                       \ Duplicate detected
   THEN
   
@@ -792,10 +839,12 @@ IFZ7 : cell- 1 CELLS - ;
     IFGF utime                 \ Starting timestamp
     IFSF get-time
     IFVF ticks
+    IFZF timer::us-counter
     speculate DROP
     IFGF utime                 \ Ending timestamp
     IFSF get-time
     IFVF ticks
+    IFZF timer::us-counter
 
     PAGE display-grid
     31 15 AT-XY
@@ -804,7 +853,9 @@ IFZ7 : cell- 1 CELLS - ;
     IFSF ( us1 s1 us2 s2 ) ROT - 1000000 *
     IFSF ( us1 us2 s2-s1:us ) SWAP ROT - +
     IFVF SWAP - 1000 *
-    CR . ." us elapsed"
+    IFZF 2SWAP DNEGATE D+ DROP
+    IFNZF CR . ." us elapsed"
+    IFZF cr d. ." us elapsed"
 
     CR ." Maximum recursion level: " reclevmax ?
     CR ." Problem solved at level: " reclev ?
@@ -817,5 +868,5 @@ IFZ7 : cell- 1 CELLS - ;
     CR ." Backtracked " nbt ? ." times"
   THEN ;
 
-main 7 EMIT wasteit
-
+main 7 EMIT
+IFNZF wasteit
