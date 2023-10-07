@@ -338,27 +338,48 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
 \ S" ....:....:....:...." 13 initline
 \ S" ....:....:....:...." 14 initline
 \ S" ....:....:....:...." 15 initline
- 
+
+  \ Elektor data set from the July/August, 2023 issue.
+  S" D.16:0.27:.A..:...B" 0  initline
+  S" .3..:....:0182:7..." 1  initline
+  S" 5.F.:...4:3B.D:..0A" 2  initline
+  S" A...:.35.:...F:..4." 3  initline
+
+  S" 3...:4..1:9C..:E..." 4  initline
+  S" ...1:.B..:6...:.C8." 5  initline
+  S" 6..5:..90:A8..:.DF." 6  initline
+  S" 0.A.:C.D.:..1.:4567" 7  initline
+
+  S" .D6.:84F.:.E..:2..." 8  initline
+  S" 2E8.:5.0.:74..:61.." 9  initline
+  S" .F..:...6:..2B:..5." 10 initline
+  S" .504:....:..9.:C.E8" 11 initline
+
+  S" .6..:9..3:C7.0:...." 12 initline
+  S" ....:.542:.9..:...." 13 initline
+  S" ..52:.0EA:..D8:..B." 14 initline
+  S" 8.9.:...F:...4:...6" 15 initline
+
   \ Original design.
-  S" 0...:.5.7:.9.B:.DEF" 0  initline
-  S" 45..:C..F:...2:..AB" 1  initline
-  S" ..A.:..2.:.D..:.5.7" 2  initline
-  S" C..F:8.A.:.5..:01.3" 3  initline
-
-  S" 1.0.:7..4:D...:..C6" 4  initline
-  S" .A..:.3.5:..4.:...9" 5  initline
-  S" 6..8:..1.:72..:5..4" 6  initline
-  S" ..9.:2..C:E3.8:..1." 7  initline
-
-  S" 2..1:5..6:...C:...." 8  initline
-  S" B..C:..D.:.8..:.F.5" 9  initline
-  S" ....:.B.1:..0.:6..A" 10 initline
-  S" 5...:..F.:...D:..0." 11 initline
-
-  S" 3..0:B..A:.6.1:E..8" 12 initline
-  S" 9.C.:..7.:30..:.A.1" 13 initline
-  S" A.D.:..3.:.E..:.6.0" 14 initline
-  S" .8..:E0..:..C.:D4.." 15 initline
+\  S" 0...:.5.7:.9.B:.DEF" 0  initline
+\  S" 45..:C..F:...2:..AB" 1  initline
+\  S" ..A.:..2.:.D..:.5.7" 2  initline
+\  S" C..F:8.A.:.5..:01.3" 3  initline
+\
+\  S" 1.0.:7..4:D...:..C6" 4  initline
+\  S" .A..:.3.5:..4.:...9" 5  initline
+\  S" 6..8:..1.:72..:5..4" 6  initline
+\  S" ..9.:2..C:E3.8:..1." 7  initline
+\
+\  S" 2..1:5..6:...C:...." 8  initline
+\  S" B..C:..D.:.8..:.F.5" 9  initline
+\  S" ....:.B.1:..0.:6..A" 10 initline
+\  S" 5...:..F.:...D:..0." 11 initline
+\
+\  S" 3..0:B..A:.6.1:E..8" 12 initline
+\  S" 9.C.:..7.:30..:.A.1" 13 initline
+\  S" A.D.:..3.:.E..:.6.0" 14 initline
+\  S" .8..:E0..:..C.:D4.." 15 initline
 
   \ Transaction stack initialization.
   tstk-bottom tstkp !
@@ -853,7 +874,7 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
     IFSF ( us1 s1 us2 s2 ) ROT - 1000000 *
     IFSF ( us1 us2 s2-s1:us ) SWAP ROT - +
     IFVF SWAP - 1000 *
-    IFZF 2SWAP DNEGATE D+ DROP
+    IFZF 2SWAP DNEGATE D+
     IFNZF CR . ." us elapsed"
     IFZF cr d. ." us elapsed"
 
