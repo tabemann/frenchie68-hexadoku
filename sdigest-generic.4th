@@ -295,9 +295,7 @@ VARIABLE sha1.state            \ One of the following values
   \ message's bitcount length is inserted in an atomic manner--
   \ not across 512 bit blocks.
   sha1.perblock-bytecount @ 56 < IF \ 56 as in 64 - 8
-    app.msglen @ sha1.total-bytecount @ <>
-    IFNZF ABORT" WTH?"
-    IFZF if [: ." WTH?" cr ;] ?raise then
+    app.msglen @ sha1.total-bytecount @ <> ABORT" WTH?"
     app.msglen @ 8 sha1.store.bitcount
     sha1.state-completed sha1.state ! \ Update SHA1 state
   THEN  

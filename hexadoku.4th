@@ -224,12 +224,7 @@ zf? 0= [if]
 
 : tstk-push ( begin-flag ptr -- )
   \ We need exactly two cells. Is enough room available?
-  tstkp @ tstack - 2cells/ 0=
-  [ zf? 0= ] [if]
-    ABORT" Transaction stack overflow"
-  [else]
-    if [: ." Transaction stack overflow" cr ;] ?raise then
-  [then]
+  tstkp @ tstack - 2cells/ 0= ABORT" Transaction stack overflow"
 
   \ Extract x and y from the 'ptr' pointer.
   DUP >R
@@ -243,12 +238,7 @@ zf? 0= [if]
 
 : tstk-pop ( -- begin-flag )
   \ At least two cells need to be stacked up.
-  tstk-bottom tstkp @ - 2cells/ 0=
-  [ zf? 0= ] [if]
-    ABORT" Transaction stack overflow"
-  [else]
-    if [: ." Transaction stack overflow" cr ;] ?raise then
-  [then]
+  tstk-bottom tstkp @ - 2cells/ 0= ABORT" Transaction stack overflow"
 
   tstkp @ DUP @ >R             \ R: bitmsk, S: tsktp@
   CELL+ tstkp !
@@ -386,11 +376,7 @@ zf? 0= [if]
         + EXIT
       THEN
     LOOP
-    [ zf? 0= ] [if]
-      1 ABORT" WTF?"             \ This should never be executed
-    [else]
-      [: ." WTF?" cr ;] ?raise   \ This should never be executed
-    [then]
+    1 ABORT" WTF?"             \ This should never be executed
   THEN
   DROP wildc ;
 
