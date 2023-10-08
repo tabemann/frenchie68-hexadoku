@@ -96,26 +96,22 @@ IFZF : cell/ [inlined] 2 RSHIFT ;
 IFZF : 2cells/ [inlined] 3 RSHIFT ;
 
 \ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
-IFDP IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
-IFDP IFZ7 : ;pn   [CHAR] ; EMIT pn ;
-IFDP IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
-IFDP IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
+IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
+IFZ7 : ;pn   [CHAR] ; EMIT pn ;
+IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
   
 IFZ7 : machdep-wait ;
 IFZ7 : cell/ 1 RSHIFT ;
 IFZ7 : 2cells/ 2 RSHIFT ;
 IFZ7 : 2nip 2SWAP 2DROP ;
 
-IFDP IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
-IFDP IFZF : ;pn   [CHAR] ; EMIT pn ;
-IFDP IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
-IFDP IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
-IFNDP IFZF : AT-XY 2drop ;
+IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
+IFZF : ;pn   [CHAR] ; EMIT pn ;
+IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
 
-IFDP IFZF : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
-IFNDP IFZF : page ( -- ) ;
-IFZF : utime ( -- us ) timer::us-counter ;
-IFZF : ? ( addr -- ) @ . ;
+IFZF : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
 
 IFNZF : 16* 4 LSHIFT ;
 IFNZF : 16/mod DUP $F AND SWAP 4 RSHIFT ;
@@ -833,12 +829,12 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
 : main ( -- )
   inits
 
-  stopon1st IF
-    PAGE -cursor display-grid
-  THEN
+  IFDP stopon1st IF
+  IFDP   PAGE -cursor display-grid
+  IFDP THEN
 
   infer 0= IF
-    +cursor
+    IFDP +cursor
     CR ." No solutions"
     emergency-exit
   THEN
@@ -857,8 +853,8 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
     IFVF ticks
     IFZF timer::us-counter
 
-    PAGE display-grid
-    31 15 AT-XY
+    IFDP PAGE display-grid
+    IFDP 31 15 AT-XY
 
     IFGF 2SWAP DNEGATE D+ DROP
     IFSF ( us1 s1 us2 s2 ) ROT - 1000000 *
