@@ -202,6 +202,7 @@ IFZF : 2^n ( n -- 2^n ) [inlined] 1 swap lshift ;
   grid - cell/ 16/mod ;
 
 : |visual ( val saddr -- val saddr )
+  IFNDP exit
   \ No visualization if looking for for multiple solutions.
   stopon1st 0= IF EXIT THEN
 
@@ -226,9 +227,7 @@ IFZF : 2^n ( n -- 2^n ) [inlined] 1 swap lshift ;
   THEN
 
   OVER getxy-from-grid-addr    \ val\saddr\char-from-val\x\y
-  IFDP SWAP 2* SWAP AT-XY EMIT machdep-wait
-  IFNDP 2drop drop
-  ;
+  SWAP 2* SWAP AT-XY EMIT machdep-wait ;
 
 \ -------------------------------------------------------------
 \ Transaction stack handling (undo log).
