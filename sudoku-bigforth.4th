@@ -54,13 +54,13 @@
 DECIMAL
 \ MARKER wasteit
 
-\ Make this work for zeptoforth
-: find79 token dup averts x-token-expected find 0<> ;
+compat import
+: find compat::find ;
 
-\ : find79                       \ -- xt|0; find79 <name>
-\   BL WORD
-\   DUP C@ 0= IF DROP ." Missing word name" EXIT THEN
-\   FIND 0= IF DROP FALSE THEN ;
+: find79                       \ -- xt|0; find79 <name>
+  BL WORD
+  DUP C@ 0= IF DROP ." Missing word name" EXIT THEN
+  FIND 0= IF DROP FALSE THEN ;
 
 : gf? [ find79 utime ] LITERAL ;      \ TRUE if GNU Forth
 : sf? [ find79 SwiftForth ] LITERAL ; \ TRUE if SwiftForth
@@ -111,8 +111,6 @@ IFDP IFZF : ;pn   [CHAR] ; EMIT pn ;
 IFDP IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
 IFDP IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
 IFNDP IFZF : AT-XY 2drop ;
-
-IFZF : within ( test low high -- flag ) OVER - >R - R> U< ;
 
 IFDP IFZF : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
 IFNDP IFZF : page ( -- ) ;
@@ -778,10 +776,7 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
   sha1.digest
   sol-digest1 ingest-digest
 
-  sol-digest0 5 CELLS sol-digest1 OVER
-  IFNZF COMPARE 0=
-  IFZF equal-strings?
-  IF
+  sol-digest0 5 CELLS sol-digest1 OVER COMPARE 0= IF
     EXIT                       \ Duplicate detected
   THEN
   
@@ -891,3 +886,5 @@ IFZF : cell- [inlined] [ 1 cells ] literal - ;
 
 main 7 EMIT
 IFNZF wasteit
+
+compat unimport

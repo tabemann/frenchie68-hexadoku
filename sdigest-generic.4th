@@ -9,16 +9,17 @@
 
 DECIMAL
 
-\ Change for zeptoforth
-\ Make this work for zeptoforth
-: find79 token dup averts x-token-expected find 0<> ;
+compat import
+: find compat::find ;
+
+: find79                       \ -- xt|0; find79 <name>
+  BL WORD
+  DUP C@ 0= IF DROP ." Missing word name" EXIT THEN
+  FIND 0= IF DROP FALSE THEN ;
+
 : zf? [ find79 task::spawn ] LITERAL ; \ TRUE if zeptoforth
 : IFZF [immediate] [ zf? 0= ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
 : IFNZF [immediate] [ zf? ] LITERAL IF POSTPONE \ THEN ; \ IMMEDIATE
-
-IFZF : CMOVE MOVE ;
-IFZF : within ( test low high -- flag ) OVER - >R - R> U< ;
-IFZF : erase ( addr bytes -- ) 0 fill ;
 
 \ Assert basic assumptions.
 1 CELLS 8 = CONSTANT sha1.is64
