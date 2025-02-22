@@ -53,7 +53,7 @@
 \ -------------------------------------------------------------
 DECIMAL
 
-1 cells 4 <> [if] MARKER wasteit [then]
+MARKER wasteit
 
 : gf? 1 CELLS 8 = ;            \ TRUE if GNU Forth
 : zf? 1 CELLS 4 = ;            \ TRUE if zeptoforth
@@ -63,7 +63,7 @@ DECIMAL
 : IFZF [ gf? zf? 0= or ] LITERAL IF POSTPONE \ THEN ;
 
 \ Are we going to display the puzzle?
-false constant display-puzzle?
+true constant display-puzzle?
 
 \ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
 display-puzzle? [if]
@@ -93,13 +93,8 @@ IFZF : machdep-wait ;
 IFZF : cell/ [inlined] 2 RSHIFT ;
 IFZF : 2cells/ [inlined] 3 RSHIFT ;
 
-zf? [if] : within ( test low high -- flag ) OVER - >R - R> U< ; [then]
+zf? [if] : within ( test low high -- flag ) COMPAT::WITHIN ; [then]
 
-display-puzzle? [if]
-  zf? [if]
-    : page ( -- ) 0 0 AT-XY esc[ [char] K emit esc[ [char] J emit ;
-  [then]
-[then]
 zf? [if] : utime ( -- us ) timer::us-counter ; [then]
 zf? [if] : ? ( addr -- ) @ . ; [then]
 
@@ -117,10 +112,12 @@ zf? 0= [if]
 
 display-puzzle? 0= [if] : AT-XY 2drop ; [then]
 
+IFZF : abort" [immediate] postpone compat::abort" ;
+
 \ -------------------------------------------------------------
 \ Variables and constants.
 
-TRUE  CONSTANT stopon1st       \ User tunable. No vis. if FALSE
+TRUE CONSTANT stopon1st       \ User tunable. No vis. if FALSE
 FALSE VALUE logtrans   \ If NZ, log changes to the trans. stack
 BL CONSTANT wildc
 VARIABLE unknowns
@@ -181,16 +178,21 @@ zf? 0= [if]
   : 2^n ( n -- 2^n ) [inlined] 1 swap lshift ;
 [then]
 
+\ Contributed by Bob Armstrong.
+: pow2? ( n -- f )
+  DUP DUP 1- AND 0= SWAP 0<> AND ;
+
 \ -------------------------------------------------------------
 \ Incremental grid visualization.
+
+: getxy-from-grid-addr ( saddr - x y )
+  grid - cell/ 16/mod ;
 
 : |visual ( val saddr -- val saddr )
   \ No visualization if looking for for multiple solutions.
   stopon1st 0= IF EXIT THEN
 
-  OVER countbits 1 <> IF
-    wildc
-  ELSE                         \ Spot value is known
+  OVER pow2? IF                \ Spot value is known
     OVER 16 0 DO
       DUP I 2^n = IF
         DROP I
@@ -198,28 +200,28 @@ zf? 0= [if]
         + LEAVE
       THEN
     LOOP
+  ELSE
+    wildc
   THEN
 
   \ S: val\saddr\char-from-val
   \ Return immediately if char==wildc and bitcount(saddr@)<>1
   \ This corresponds to a situation where a given cell's mask
   \ changes but the spot remains unresolved.
-  OVER @ countbits 1 <> OVER wildc = AND IF
+  OVER @ pow2? 0= OVER wildc = AND IF
     DROP EXIT
   THEN
 
-  \ Now to convert 'saddr' to x,y.
-  OVER grid - cell/ 16/mod   \ S: val\saddr\char-from-val\x\y
-  SWAP 2* SWAP AT-XY
-  [ display-puzzle? ] [if] EMIT machdep-wait [else] drop [then]  ;
+  OVER getxy-from-grid-addr    \ S: val\saddr\char-from-val\x\y
+  SWAP 2* SWAP AT-XY EMIT machdep-wait ;
 
 \ -------------------------------------------------------------
 \ Transaction stack handling (undo log).
 
 zf? 0= [if]
-  : cell- [ 1 CELLS ] LITERAL - ;
+  : cell- cell - ;
 [else]
-  : cell- [inlined] [ 1 CELLS ] LITERAL - ;
+  : cell- [inlined] cell - ;
 [then]
 
 : tstk-push ( begin-flag ptr -- )
@@ -255,8 +257,9 @@ zf? 0= [if]
 
   \ Check whether we are going from resolved to unresolved.
   \ If so increment 'unknowns' accordingly.
-  DUP @ countbits 1 = IF       \ S: beg-flg\bitmsk\saddr
-    OVER countbits 1 > IF
+  DUP @ pow2? IF               \ S: beg-flg\bitmsk\saddr
+    \ XXX: this assumes 'bitmsk' is NZ!!!
+    OVER pow2? 0= IF
       unknowns 1+!
     THEN
   THEN
@@ -367,8 +370,7 @@ zf? 0= [if]
   [ display-puzzle? ] [if] #27 EMIT ." [?25h" [then] ;
 
 : mask>char ( mask -- char )
-  DUP countbits                \ S: mask\nbits
-  1 = IF
+  DUP pow2? IF                 \ S: mask\nbits
     16 0 DO
       DUP I 2^n = IF
         DROP I UNLOOP
@@ -404,7 +406,7 @@ zf? 0= [if]
   THEN
 
   \ This update resolves the spot point to by 'saddr'.
-  OVER countbits 1 = IF unknowns 1-! THEN
+  OVER pow2? IF unknowns 1-! THEN
 
   logtrans IF                  \ Transaction is logged
     FALSE OVER tstk-push
@@ -424,7 +426,7 @@ zf? 0= [if]
       3 PICK I +               \ Absolute col#
       3 PICK J + 16* +
       CELLS grid +
-      @ DUP countbits 1 = IF
+      @ DUP pow2? IF
         \ S: xcol\yrow\check\mask\val
         ROT OVER  \ S: xcol\yrow\mask\val\check\val
         2DUP AND  \ S: xcol\yrow\mask\val\check\val\(check&val)
@@ -457,7 +459,9 @@ zf? 0= [if]
       OVER I +                 \ Absolute col#
       OVER J + 16* +
       CELLS grid +             \ S: mask\xcol\yrow\saddr
-      DUP @ DUP countbits 1 <> IF
+      DUP @ DUP pow2? IF
+        2DROP
+      ELSE
         \ S: mask\xcol\yrow\saddr\sval
         4 PICK AND           \ S: mask\xcol\yrow\saddr\sval-new
         ?DUP IF
@@ -465,8 +469,6 @@ zf? 0= [if]
         ELSE \ Mask application would result in zero spot value
           2DROP 2DROP UNLOOP UNLOOP TRUE EXIT
         THEN
-      ELSE
-        2DROP
       THEN
       \ S: mask\xcol\yrow
     LOOP
@@ -475,14 +477,14 @@ zf? 0= [if]
 \ 4x4 block logic: either a spot is known or the list
 \ of alternatives must exclude all known spots values.
 : reduce4x4 ( -- failure-flag )
-  4 0 DO                       \ Iterate over rows
-    4 0 DO                     \ Iterate over columns
+  4 0 DO              \ Iterate over quadrant rows
+    4 0 DO            \ Iterate over quadrant columns
       I 4 * J 4 *
       2DUP getmask4 IF
         2DROP UNLOOP UNLOOP TRUE EXIT
       THEN
       ( S: xcol#\yrow#\new-possibly-zero-mask ) setmask4 IF
-        UNLOOP UNLOOP TRUE EXIT \ XXX removed extra 2DROP here!
+        UNLOOP UNLOOP TRUE EXIT
       THEN
     LOOP
   LOOP FALSE ;
@@ -490,59 +492,37 @@ zf? 0= [if]
 \ -------------------------------------------------------------
 \ Horizontal exclusion/filtering.
 
+\ ANS94 3.2.3.3 Return stack:
+\ A program shall not access from within a DO-LOOP values
+\ placed on the return stack before the loop was entered.
+\ Note: this is enforced in SwiftForth but not in Gforth.
+
 \ No side effects.
+: get-horiz-mask ( yrow -- mask\FALSE | TRUE )
+  16* CELLS grid +             \ Start of row address
+  0                            \ Sanity check
+  $FFFF                        \ Initial mask
+  16 0 DO                      \ Iterate over columns
+    \ srow-addr\check\mask
+    2 PICK I CELLS + @ DUP pow2? IF
+      \ srow-addr\check\mask\val
+      ROT OVER \ srow-addr\mask\val\check\val
+      2DUP AND \ srow-addr\mask\val\check\val\(check&val)
 
-\ Doesn't work in zeptoforth due to use of J
-zf? 0= [if]
-  : get-horiz-mask ( yrow -- mask\FALSE | TRUE )
-    0                            \ Sanity check
-    $FFFF                        \ Initial mask
-    ROT 16* CELLS grid + >R      \ Beginning of row address
-    16 0 DO                      \ Iterate over columns
-      \ S: check\mask
-      J I CELLS + @ DUP countbits 1 = IF
-        \ S: check\mask\val
-        ROT OVER \ S: mask\val\check\val
-        2DUP AND \ S: mask\val\check\val\(check&val)
-
-        IF                       \ Bit is already set!!!
-          UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
-        THEN
-
-        \ S: mask\val\check\val
-        OR                       \ S: mask\val\(check|val)
-        -rot                     \ S: (check|val)\mask\val
-        INVERT AND
-      ELSE
-        DROP
+      IF                       \ Bit is already set!!!
+        UNLOOP 2DROP 2DROP DROP TRUE EXIT
       THEN
-    LOOP R> DROP NIP FALSE ;
-[else]
-  \ Version modified for zeptoforth
-  : get-horiz-mask ( yrow -- mask\FALSE | TRUE )
-    0                            \ Sanity check
-    $FFFF                        \ Initial mask
-    ROT 16* CELLS grid + { addr }      \ Beginning of row address
-    16 0 DO                      \ Iterate over columns
-      \ S: check\mask
-      addr I CELLS + @ DUP countbits 1 = IF
-        \ S: check\mask\val
-        ROT OVER \ S: mask\val\check\val
-        2DUP AND \ S: mask\val\check\val\(check&val)
 
-        IF                       \ Bit is already set!!!
-          UNLOOP 2DROP 2DROP TRUE EXIT
-        THEN
-
-        \ S: mask\val\check\val
-        OR                       \ S: mask\val\(check|val)
-        -rot                     \ S: (check|val)\mask\val
-        INVERT AND
-      ELSE
-        DROP
-      THEN
-    LOOP NIP FALSE ;
-[then]
+      \ srow-addr\mask\val\check\val
+      OR                       \ srow-addr\mask\val\(check|val)
+      -rot                     \ srow-addr\(check|val)\mask\val
+      INVERT AND
+    ELSE
+      DROP
+    THEN
+  LOOP
+  \ srow-addr\check\mask
+  NIP NIP FALSE ;
 
 : set-horiz-mask ( yrow mask -- failure-flag )
   \ If 'mask' is zero. just return a success indication.
@@ -551,7 +531,9 @@ zf? 0= [if]
   SWAP
   16* CELLS grid +
   16 0 DO                      \ Iterate over columns
-    DUP @ DUP countbits 1 <> IF
+    DUP @ DUP pow2? IF
+      DROP
+    ELSE
       \ S: mask\saddr\sval
       2 PICK AND               \ S: mask\saddr\sval-new
       ?DUP IF
@@ -559,8 +541,6 @@ zf? 0= [if]
       ELSE \ Mask application would result in zero spot value
         2DROP UNLOOP TRUE EXIT
       THEN
-    ELSE
-      DROP
     THEN
     \ S: mask\saddr
     CELL+
@@ -568,58 +548,33 @@ zf? 0= [if]
 \ -------------------------------------------------------------
 \ Vertical exclusion/filtering.
 
+
 \ No side effects.
-\ Doesn't work in zeptoforth due to use of J
-zf? 0= [if]
-  : get-vert-mask ( xcol -- mask\FALSE | TRUE )
-    0                            \ Sanity check
-    $FFFF                        \ Initial mask
-    ROT CELLS grid + >R          \ Beginning of column address
-    16 0 DO                      \ Iterate over rows
-      \ S: check\mask
-      J I 16* CELLS + @ DUP countbits 1 = IF
-        \ S: check\mask\val
-        ROT OVER                 \ S: mask\val\check\val
-        2DUP AND              \ S: mask\val\check\val\(check&val)
+: get-vert-mask ( xcol -- mask\FALSE | TRUE )
+  CELLS grid +                 \ Start of column address
+  0                            \ Sanity check
+  $FFFF                        \ Initial mask
+  16 0 DO                      \ Iterate over rows
+    \ scol-addr\check\mask
+    2 PICK I 16* CELLS + @ DUP pow2? IF
+      \ scol-addr\check\mask\val
+      ROT OVER \ scol-addr\mask\val\check\val
+      2DUP AND \ scol-addr\mask\val\check\val\(check&val)
 
-        IF                       \ Bit is already set!!!
-          UNLOOP R> DROP 2DROP 2DROP TRUE EXIT
-        THEN
-
-        \ S: mask\val\check\val
-        OR                       \ S: mask\val\(check|val)
-        -rot                     \ S: (check|val)\mask\val
-        INVERT AND
-      ELSE
-        DROP
+      IF                       \ Bit is already set!!!
+        UNLOOP 2DROP 2DROP DROP TRUE EXIT
       THEN
-    LOOP R> DROP NIP FALSE ;
-[else]
-  \ Version modified for zeptoforth
-  : get-vert-mask ( xcol -- mask\FALSE | TRUE )
-    0                            \ Sanity check
-    $FFFF                        \ Initial mask
-    ROT CELLS grid + { addr }          \ Beginning of column address
-    16 0 DO                      \ Iterate over rows
-      \ S: check\mask
-      addr I 16* CELLS + @ DUP countbits 1 = IF
-        \ S: check\mask\val
-        ROT OVER                 \ S: mask\val\check\val
-        2DUP AND              \ S: mask\val\check\val\(check&val)
 
-        IF                       \ Bit is already set!!!
-          UNLOOP 2DROP 2DROP TRUE EXIT
-        THEN
-
-        \ S: mask\val\check\val
-        OR                       \ S: mask\val\(check|val)
-        -rot                     \ S: (check|val)\mask\val
-        INVERT AND
-      ELSE
-        DROP
-      THEN
-    LOOP NIP FALSE ;
-[then]
+      \ scol-addr\mask\val\check\val
+      OR                       \ scol-addr\mask\val\(check|val)
+      -rot                     \ scol-addr\(check|val)\mask\val
+      INVERT AND
+    ELSE
+      DROP
+    THEN
+  LOOP
+  \ srow-addr\check\mask
+  NIP NIP FALSE ;
   
 : set-vert-mask ( xcol mask -- failure-flag )
   \ If 'mask' is zero. just return a success indication.
@@ -628,7 +583,9 @@ zf? 0= [if]
   SWAP
   CELLS grid +                 \ Beginning of column address
   16 0 DO                      \ Iterate over rows
-    DUP @ DUP countbits 1 <> IF
+    DUP @ DUP pow2? IF
+      DROP
+    ELSE
       \ S: mask\saddr\sval
       2 PICK AND               \ S: mask\saddr\sval-new
       ?DUP IF
@@ -636,8 +593,6 @@ zf? 0= [if]
       ELSE \ Mask application would result in zero spot value
         2DROP UNLOOP TRUE EXIT
       THEN
-    ELSE
-      DROP
     THEN
     \ S: mask\saddr
     16 CELLS +
@@ -727,7 +682,13 @@ zf? 0= [if]
   rl+                          \ Increment recursion level
 
   get-unresolved               \ Look for an unresolved spot
-  DUP 0= IF INVERT EXIT THEN   \ Problem solved
+  DUP 0= IF
+    solutions 1+!
+    stopon1st 0= IF
+      CR display-grid
+    THEN
+    INVERT EXIT
+  THEN                         \ Problem solved
 
   DUP @                        \ S: saddr\sval
   \ The list of set bits in TOS indicate the possibilities
@@ -743,11 +704,8 @@ zf? 0= [if]
 
       infer IF                 \ No inconsistencies detected
         RECURSE IF             \ Solution found
-          solutions 1+!
           stopon1st IF
             2DROP UNLOOP TRUE EXIT
-  \       ELSE
-  \         CR display-grid
           THEN
         THEN
       THEN
@@ -755,8 +713,6 @@ zf? 0= [if]
       \ Backtrack up to the last transaction boundary.
       BEGIN tstk-pop UNTIL
       nbt 1+!                  \ Increment #backtracks
-      
-      nbt @ .
     ELSE
       R> DROP
     THEN
@@ -783,10 +739,13 @@ zf? 0= [if]
   TRUE TO logtrans
 
   stopon1st IF
-    IFGF utime                 \ Starting timestamp
+    IFGF utime
     IFZF utime
     speculate DROP
-    [ display-puzzle? ] [if] 31 15 AT-XY [then]
+    [ display-puzzle? ] [if]
+      PAGE display-grid
+      31 15 AT-XY
+    [then]
 
     IFGF utime 2SWAP DNEGATE D+ DROP CR . ." us elapsed"
     IFZF utime 2SWAP DNEGATE D+ CR d. ." us elapsed"
@@ -802,4 +761,5 @@ zf? 0= [if]
   THEN ;
 
 main 7 EMIT
-zf? 0= [if] wasteit [then]
+wasteit
+
