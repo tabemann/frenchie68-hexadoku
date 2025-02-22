@@ -63,15 +63,13 @@ MARKER wasteit
 : IFZF [ gf? zf? 0= or ] LITERAL IF POSTPONE \ THEN ;
 
 \ Are we going to display the puzzle?
-true constant display-puzzle?
+false value display-puzzle?
 
 \ Following code block borrowed from GNU Forth 0.7.3 vt100.fs.
-display-puzzle? [if]
-  IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
-  IFZ7 : ;pn   [CHAR] ; EMIT pn ;
-  IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
-  IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
-[then]
+IFZ7 : pn    BASE @ SWAP DECIMAL 0 U.R BASE ! ;
+IFZ7 : ;pn   [CHAR] ; EMIT pn ;
+IFZ7 : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFZ7 : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
 
 IFZ7 : machdep-wait ;
 IFZ7 : cell/ 1 RSHIFT ;
@@ -82,12 +80,10 @@ IFGF : machdep-wait ( 5 MS ) ; \ For visual effect only!
 IFGF : cell/ 3 RSHIFT ;
 IFGF : 2cells/ 4 RSHIFT ;
 
-display-puzzle? [if]
-  IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
-  IFZF : ;pn   [CHAR] ; EMIT pn ;
-  IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
-  IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
-[then]
+IFZF : pn    BASE @ SWAP DECIMAL (U.) BASE ! ;
+IFZF : ;pn   [CHAR] ; EMIT pn ;
+IFZF : esc[  #27 EMIT [CHAR] [ EMIT ;
+IFZF : AT-XY 1+ SWAP 1+ SWAP esc[ pn ;pn [CHAR] H EMIT ;
 
 IFZF : machdep-wait ;
 IFZF : cell/ [inlined] 2 RSHIFT ;
@@ -109,8 +105,6 @@ zf? 0= [if]
   : 1+! [inlined] 1 SWAP +! ;
   : 1-! [inlined] -1 SWAP +! ;
 [then]
-
-display-puzzle? 0= [if] : AT-XY 2drop ; [then]
 
 IFZF : abort" [immediate] postpone compat::abort" ;
 
@@ -190,7 +184,7 @@ zf? 0= [if]
 
 : |visual ( val saddr -- val saddr )
   \ No visualization if looking for for multiple solutions.
-  stopon1st 0= IF EXIT THEN
+  stopon1st 0= display-puzzle? not or IF EXIT THEN
 
   OVER pow2? IF                \ Spot value is known
     OVER 16 0 DO
@@ -352,22 +346,22 @@ zf? 0= [if]
 \ Underline character rendition on.
 : +ul ( -- )
   stopon1st 0= IF EXIT THEN
-  [ display-puzzle? ] [if] #27 EMIT ." [4m" [then] ;
+  #27 EMIT ." [4m" ;
 
 \ Underline character rendition off.
 : -ul ( -- )
   stopon1st 0= IF EXIT THEN
-  [ display-puzzle? ] [if] #27 EMIT ." [m" [then] ;
+  #27 EMIT ." [m" ;
 
 \ Turn off the cursor (VT200 control sequence).
 : -cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  [ display-puzzle? ] [if] #27 EMIT ." [?25l" [then] ;
+  #27 EMIT ." [?25l" ;
 
 \ Turn on the cursor (VT200 control sequence).
 : +cursor ( -- )
   stopon1st 0= IF EXIT THEN
-  [ display-puzzle? ] [if] #27 EMIT ." [?25h" [then] ;
+  #27 EMIT ." [?25h" ;
 
 : mask>char ( mask -- char )
   DUP pow2? IF                 \ S: mask\nbits
@@ -383,16 +377,14 @@ zf? 0= [if]
   DROP wildc ;
 
 : display-grid ( -- )
-  [ display-puzzle? ] [if]
-    grid 16 0 DO                 \ J has the current row#
-      16 0 DO                    \ I has the current col#
-        DUP @ mask>char
-        EMIT SPACE
-        CELL+
-      LOOP
-      CR
-    LOOP DROP
-  [then] ;
+  grid 16 0 DO                 \ J has the current row#
+    16 0 DO                    \ I has the current col#
+      DUP @ mask>char
+      EMIT SPACE
+      CELL+
+    LOOP
+    CR
+  LOOP DROP ;
 
 \ -------------------------------------------------------------
 \ Primary way of altering a grid's spot but not the only one!
@@ -698,9 +690,10 @@ zf? 0= [if]
       TRUE 2 PICK tstk-push    \ Insert transaction boundary
 
       R> 2 PICK
-        +ul |visual -ul
-        unknowns 1-!           \ Spot provisionally resolved
-        !                      \ Un-logged update-spot
+      
+      display-puzzle? if +ul |visual -ul then
+      unknowns 1-!           \ Spot provisionally resolved
+      !                      \ Un-logged update-spot
 
       infer IF                 \ No inconsistencies detected
         RECURSE IF             \ Solution found
@@ -724,31 +717,27 @@ zf? 0= [if]
 : main ( -- )
   inits
 
-  [ display-puzzle? ] [if]
+  display-puzzle? if
     stopon1st IF
       PAGE -cursor display-grid
     THEN
+  then
     
-    infer 0= IF
-      +cursor
-      CR ." No solutions" QUIT
-    THEN
-  [then]
+  infer 0= IF
+    +cursor
+    CR ." No solutions" QUIT
+  THEN
 
   \ From here on, everything that could be inferred is in.
   TRUE TO logtrans
 
   stopon1st IF
-    IFGF utime
-    IFZF utime
+    utime
     speculate DROP
-    [ display-puzzle? ] [if]
-      PAGE display-grid
-      31 15 AT-XY
-    [then]
+    PAGE display-grid
+    31 15 AT-XY
 
-    IFGF utime 2SWAP DNEGATE D+ DROP CR . ." us elapsed"
-    IFZF utime 2SWAP DNEGATE D+ CR d. ." us elapsed"
+    utime 2SWAP DNEGATE D+ CR d. ." us elapsed"
 
     CR ." Maximum recursion level: " reclevmax ?
     CR ." Problem solved at level: " reclev ?
